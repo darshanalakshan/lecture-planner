@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set alarm</title>
+<style>
+  :root { --bg:#f6f7f4; --fg:#1b2420; --muted:#5d6a63; --accent:#1f6f54; --accent-fg:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141a17; --fg:#eef2ef; --muted:#9aa8a0; --accent:#5fc9a0; --accent-fg:#0d1612; }
+  }
+  html, body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; text-align:center; padding:1.5rem; }
+  #time { font-size:5rem; font-weight:700; letter-spacing:-0.02em; margin:0; }
+  #msg { color:var(--muted); margin:0; max-width:28ch; }
+  a.btn { background:var(--accent); color:var(--accent-fg); text-decoration:none; font-weight:600;
+          padding:1rem 2rem; border-radius:999px; font-size:1.1rem; }
+  small { color:var(--muted); max-width:34ch; }
+</style>
+</head>
+<body>
+  <p id="time">--:--</p>
+  <p id="msg"></p>
+  <a id="go" class="btn" href="#">Set alarm</a>
+  <small>Opens your Clock app with the alarm filled in. Tap Save there. Works in Chrome or Samsung Internet on Android.</small>
+<script>
+  // Usage: alarm.html?h=7&m=5&msg=Lecture%20day
+  const p = new URLSearchParams(location.search);
+  const h = parseInt(p.get("h"), 10), m = parseInt(p.get("m"), 10);
+  const msg = p.get("msg") || "Lecture";
+  if (Number.isInteger(h) && Number.isInteger(m)) {
+    document.getElementById("time").textContent =
+      String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    document.getElementById("msg").textContent = msg;
+    document.getElementById("go").href =
+      "intent:#Intent;action=android.intent.action.SET_ALARM;" +
+      "i.android.intent.extra.alarm.HOUR=" + h + ";" +
+      "i.android.intent.extra.alarm.MINUTES=" + m + ";" +
+      "S.android.intent.extra.alarm.MESSAGE=" + encodeURIComponent(msg) + ";" +
+      "B.android.intent.extra.alarm.SKIP_UI=false;end";
+  } else {
+    document.getElementById("msg").textContent = "Missing alarm time in the link.";
+    document.getElementById("go").style.display = "none";
+  }
+</script>
+</body>
+</html>

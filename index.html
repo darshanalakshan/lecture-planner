@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lecture planner</title>
+<style>
+  :root { --bg:#f6f7f4; --fg:#1b2420; --muted:#5d6a63; --accent:#1f6f54; --accent-fg:#fff; --line:#d9ded9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141a17; --fg:#eef2ef; --muted:#9aa8a0; --accent:#5fc9a0; --accent-fg:#0d1612; --line:#2a3530; }
+  }
+  body { background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; margin:0; line-height:1.5; }
+  main { max-width:34rem; margin:0 auto; padding:2rem 1.25rem 3rem; }
+  h1 { margin:0 0 .25rem; font-size:1.6rem; }
+  p.sub { color:var(--muted); margin:0 0 1.5rem; }
+  section { border-top:1px solid var(--line); padding:1.25rem 0; }
+  h2 { font-size:1.05rem; margin:0 0 .5rem; }
+  a.btn, button { display:inline-block; background:var(--accent); color:var(--accent-fg); border:0; font:inherit;
+    font-weight:600; padding:.7rem 1.4rem; border-radius:999px; text-decoration:none; cursor:pointer; }
+  input[type=time] { font:inherit; padding:.5rem; border:1px solid var(--line); border-radius:.5rem;
+    background:transparent; color:inherit; margin-right:.5rem; }
+  ol { padding-left:1.2rem; margin:.5rem 0 0; } li { margin:.3rem 0; }
+  code { background:var(--line); padding:.1rem .35rem; border-radius:.3rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lecture planner</h1>
+  <p class="sub">Emails tomorrow's commute plan every evening, with a one-tap alarm link.</p>
+
+  <section>
+    <h2>Send tomorrow's plan now</h2>
+    <p>Opens the workflow page. Press <b>Run workflow</b> there (you need to be signed in to GitHub).</p>
+    <a id="run" class="btn" href="#">Open workflow</a>
+  </section>
+
+  <section>
+    <h2>Test the alarm link</h2>
+    <p>Pick a time and tap on your Samsung phone to check the Clock app opens.</p>
+    <input id="t" type="time" value="07:00">
+    <button id="test">Try alarm</button>
+  </section>
+
+  <section>
+    <h2>Setup checklist</h2>
+    <ol>
+      <li>Repo Settings → Pages → deploy from branch <code>main</code>, folder <code>/ (root)</code>.</li>
+      <li>Repo Settings → Secrets and variables → Actions → add: <code>ICS_URL</code>, <code>RESROBOT_KEY</code>, <code>ORIGIN_ID</code>, <code>DEST_ID</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>EMAIL_TO</code>.</li>
+      <li>Actions tab → enable workflows. It then runs every evening on its own.</li>
+    </ol>
+  </section>
+</main>
+<script>
+  // Works for https://USER.github.io/REPO/
+  const user = location.hostname.split(".")[0];
+  const repo = location.pathname.split("/")[1] || "";
+  document.getElementById("run").href =
+    `https://github.com/${user}/${repo}/actions/workflows/daily.yml`;
+  document.getElementById("test").onclick = () => {
+    const [h, m] = document.getElementById("t").value.split(":").map(Number);
+    location.href = `alarm.html?h=${h}&m=${m}&msg=${encodeURIComponent("Test alarm")}`;
+  };
+</script>
+</body>
+</html>
