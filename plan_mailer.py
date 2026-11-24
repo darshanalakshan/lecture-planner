@@ -6,9 +6,10 @@ pip install requests icalendar recurring-ical-events
 
 Environment variables (use GitHub Actions secrets or a .env you export):
   ICS_URL          your class calendar feed URL
-  RESROBOT_KEY     Trafiklab ResRobot API key
-  ORIGIN_ID        ResRobot stop id for home  (find with the lookup helper below)
-  DEST_ID          ResRobot stop id for campus
+  VT_KEY, VT_SECRET  Vasttrafik developer-portal client id + secret (preferred; subscribe app to Planera Resa v4)
+  RESROBOT_KEY     Trafiklab ResRobot key (only used if VT_KEY is not set)
+  ORIGIN_ID        stop id for home   (Vasttrafik gid or ResRobot extId)
+  DEST_ID          stop id for campus
   SMTP_USER        e.g. yourname@gmail.com
   SMTP_PASS        Gmail app password (not your normal password)
   EMAIL_TO         where to send the plan
@@ -51,6 +52,12 @@ def tomorrows_events(ics_url):
 
 def find_stop(name):
     """Helper: python plan_mailer.py find 'Trollhättan C' -> prints stop ids."""
+    if os.getenv("VT_KEY"):
+        r = requests.get("https://ext-api.vasttrafik.se/pr/v4/locations/by-text", params={"q": name},
+                         headers={"Authorization": f"Bearer {vt_token()}"}, timeout=30)
+        for s in r.json().get("results", []):
+            print(s.get("gid"), s.get("name"))
+        return
     r = requests.get("https://api.resrobot.se/v2.1/location.name", params={
         "input": name, "format": "json", "accessId": os.environ["RESROBOT_KEY"]}, timeout=30)
     for s in r.json().get("stopLocationOrCoordLocation", []):
@@ -74,6 +81,49 @@ def plan_trip(arrive_by):
         arr = datetime.fromisoformat(f'{legs[-1]["Destination"]["date"]}T{legs[-1]["Destination"]["time"]}').replace(tzinfo=TZ)
         if arr <= arrive_by and (best is None or dep > best[0]):
             best = (dep, arr, legs)
+    return None if best is None else (best[0], best[1], describe_legs(best[2]))
+
+
+def vt_token():
+    """Client-credentials token (documented at developer.vasttrafik.se/guides/oauth2)."""
+    r = requests.post("https://ext-api.vasttrafik.se/token", data={"grant_type": "client_credentials"},
+                      auth=(os.environ["VT_KEY"], os.environ["VT_SECRET"]), timeout=30)
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def _vt_time(leg, kind):
+    cap = kind.capitalize()  # Departure / Arrival
+    v = (leg.get(f"estimated{cap}Time") or leg.get(f"estimatedOtherwisePlanned{cap}Time")
+         or leg.get(f"planned{cap}Time"))
+    return datetime.fromisoformat(v).astimezone(TZ)
+
+
+def plan_trip_vt(arrive_by):
+    """Latest Vasttrafik journey (Planera Resa v4) arriving before arrive_by, using live times."""
+    r = requests.get("https://ext-api.vasttrafik.se/pr/v4/journeys",
+                     headers={"Authorization": f"Bearer {vt_token()}"},
+                     params={"originGid": os.environ["ORIGIN_ID"], "destinationGid": os.environ["DEST_ID"],
+                             "dateTime": arrive_by.isoformat(), "dateTimeRelatesTo": "arrival", "limit": 5},
+                     timeout=30)
+    r.raise_for_status()
+    best = None
+    for j in r.json().get("results", []):
+        legs = j.get("tripLegs", [])
+        if not legs:
+            continue
+        dep, arr = _vt_time(legs[0], "departure"), _vt_time(legs[-1], "arrival")
+        if arr <= arrive_by and (best is None or dep > best[0]):
+            lines = []
+            for l in legs:
+                sj = (l.get("serviceJourneys") or [{}])[0]
+                name = (sj.get("line") or {}).get("name", "walk")
+                o = (l.get("origin") or {}).get("stopPoint", {}).get("name", "?")
+                d = (l.get("destination") or {}).get("stopPoint", {}).get("name", "?")
+                if name == "walk" and not sj:
+                    continue
+                lines.append(f"{_vt_time(l, 'departure'):%H:%M} {o} → {_vt_time(l, 'arrival'):%H:%M} {d} ({name})")
+            best = (dep, arr, lines)
     return best
 
 
@@ -95,7 +145,7 @@ def build_and_send():
         return
     first_start, _, title, room = events[0]
     arrive_by = first_start - timedelta(minutes=BUFFER_MIN)
-    trip = plan_trip(arrive_by)
+    trip = plan_trip_vt(arrive_by) if os.getenv("VT_KEY") else plan_trip(arrive_by)
 
     sched = "\n".join(f'  {s:%H:%M}-{e:%H:%M}  {t} {("(" + r + ")") if r else ""}' for s, e, t, r in events)
     if trip:
@@ -107,7 +157,7 @@ def build_and_send():
                 f"Schedule:\n{sched}\n\n"
                 f"Alarm: {alarm:%H:%M}\nLeave home: {out_door:%H:%M}\n"
                 f"Depart: {dep:%H:%M}, arrive {arr:%H:%M} (first lecture {first_start:%H:%M})\n\n"
-                "Route:\n  " + "\n  ".join(describe_legs(legs)) +
+                "Route:\n  " + "\n  ".join(legs) +
                 f"\n\nSet alarm on your phone (open in Chrome):\n{link}\n")
         subject = f"Tomorrow: alarm {alarm:%H:%M}, first lecture {first_start:%H:%M}"
     else:
